@@ -1,0 +1,54 @@
+# GitHub Actions: builds the Windows release of the fork on a Linux runner, the way
+# scripts/build-windows.sh describes (cross-compile with llvm-mingw; nothing runs on Windows).
+# Put this file at .github/workflows/build-windows.yml in the fork.
+# Written without being able to run it: the first run may need a fix or two (usually a missing
+# host tool); the log of the failing step says which.
+name: Build Windows
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ["**"]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0 # tags, for the version string (git describe)
+
+      - name: Host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build glslang-tools python3 git curl xz-utils zip unzip \
+            build-essential pkg-config meson autoconf automake libtool nasm yasm
+
+      - name: Cache the toolchain and the target libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/windows/toolchain
+            out/windows/sysroot
+          key: windows-deps-${{ hashFiles('packaging/windows/deps.lock', 'scripts/windows/*.sh') }}
+
+      - name: Build
+        run: bash scripts/build-windows.sh
+
+      - name: Package
+        run: BB_ALLOW_DIRTY=1 bash scripts/package-windows.sh
+
+      - name: Collect
+        run: |
+          mkdir -p dist
+          cp out/windows/bin/*.exe dist/
+          find out -maxdepth 3 -name '*.zip' -exec cp {} dist/ \;
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ufc3-windows
+          path: dist/
+          if-no-files-found: error
