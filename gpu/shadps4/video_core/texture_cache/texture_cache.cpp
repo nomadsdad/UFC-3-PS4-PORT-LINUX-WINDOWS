@@ -341,9 +341,12 @@ static bool ShouldReadBackLinear(const ImageInfo& info, bool target) {
         return env && env[0] ? std::strtoull(env, nullptr, 10) * 1024ull : 0ull;
     }();
     static const int only = [] {
+        // ufc3 default: only storage images (and tiny ones) are read back; render targets are not
+        // (the career hub's full-screen render targets cost about 2 ms per fence, each waiting for
+        // the GPU). BB_READBACK_LINEAR_ONLY=a reads back every linear image again, as before.
         const char* env = std::getenv("BB_READBACK_LINEAR_ONLY");
-        if (!env) {
-            return 0;
+        if (!env || !env[0]) {
+            return 1;
         }
         return env[0] == 's' ? 1 : (env[0] == 'r' ? 2 : 0);
     }();
